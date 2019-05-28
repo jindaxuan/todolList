@@ -1,6 +1,10 @@
 ## 制作思路
 ### 前置知识点
-
+## 制作思路
+    - 这是利用了node.js ajax的知识制作的一个TODOlist
+    -其中运用了templete模板引擎，jQuery，ajax函数封装等知识
+    通过做完这个项目，能够对于前后端的合作，ajax的运用，有一个很好的掌握。
+    
 - es5数组新方法学习
   - find
   - filter
