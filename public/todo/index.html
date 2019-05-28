@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Todo List</title>
+	<link rel="stylesheet" href="assets/css/base.css">
+	<link rel="stylesheet" href="assets/css/index.css">
+</head>
+
+<body>
+	<section class="todoapp">
+		<header class="header">
+			<h1>todos</h1>
+			<input id="task" class="new-todo" placeholder="What needs to be done?" autofocus>
+		</header>
+		<!-- This section should be hidden by default and shown when there are todos -->
+		<!-- 当你在编辑一个任务的时候，你应该给它一个类名叫edit -->
+		<section class="main">
+			<input class="toggle-all" type="checkbox">
+			<label for="toggle-all">Mark all as complete</label>
+			<ul class="todo-list" id="todo-list">
+				<!-- These are here just to show the structure of the list items -->
+				<!-- List items should get the class `editing` when editing and `completed` when marked as completed -->
+				<!-- <li>
+					<div class="view">
+						<input class="toggle" type="checkbox">
+						<label>Buy a unicorn</label>
+						<button class="destroy"></button>
+					</div>
+					<input class="edit" value="Rule the web">
+				</li> -->
+			</ul>
+		</section>
+		<!-- This footer should hidden by default and shown when there are todos -->
+		<footer class="footer">
+			<!-- This should be `0 items left` by default -->
+			<span class="todo-count"><strong id="count">0</strong> item left</span>
+			<!-- Remove this if you don't implement routing -->
+			<ul class="filters">
+				<li>
+					<a class="selected" href="#/" id="all">All</a>
+				</li>
+				<li>
+					<a href="#/active" id="active">Active</a>
+				</li>
+				<li>
+					<a href="#/completed" id="completed">Completed</a>
+				</li>
+			</ul>
+			<!-- Hidden if no completed items are left ↓ -->
+			<button class="clear-completed">Clear completed</button>
+		</footer>
+	</section>
+
+	<script src="/js/jquery.min.js"></script>
+	<script src="/js/template-web.js"></script>
+	<script type="text/html" id="todoTpl">
+		{{each tasks}}
+			<li class='{{$value.completed?"completed":""}}'>
+				<div class='view'>
+					<input type="checkbox" class='toggle' {{$value.completed?"checked":""}}>
+					<label>{{$value.title}}</label>
+					<button class='destroy' data-id='{{$value._id}}'></button>
+				</div>
+				<input class='edit' value='{{$value.title}}' data-id='{{$value._id}}'>
+			</li>
+		{{/each}}
+	</script>
+	<script>
+		// 数据驱动，用数据渲染.操作dom太麻烦不如操作数据
+		// 当页面打开之后，请求数据，渲染列表
+		// 在全局定义一个数组，储存所有li的数据
+		var taskArr = [];
+		$.ajax({
+			type: 'get',
+			url: '/todo/task',
+			success: function (response) {
+				taskArr = response;
+				// console.log(response);
+				render();
+			}
+		})
+		// 添加任务功能
+		// 添加键盘回车按钮----》效验数据--》ajax----》重新渲染代码 ----》重构代码
+		$('#task').on('keyup', function (e) {
+			if (e.keyCode == 13) {
+				var item = $(this).val();
+				// var item = this.value;
+				if (item.trim() == '') {
+					alert('值不能为空');
+					return;
+				}
+				// 上传数据
+				$.ajax({
+					type: 'post',
+					url: '/todo/addTask',
+					contentType: 'application/json',
+					//把你填写的东西赋值给title，转换成json数据，上传至数据库
+					data: JSON.stringify({ title: item }),
+					success: function (response) {
+						console.log(response);
+						taskArr.unshift(response);
+						render();
+						//输入框的内容清空
+						$('#task').val("");
+						
+					}
+				})
+			}
+		})
+		// 把渲染页面功能提取出来，封装，顺便封装计算未完成任务数
+		function render() {
+			var html = template('todoTpl', { tasks: taskArr })
+			$('#todo-list').html(html)
+			$('footer strong').text(taskArr.filter(item=> item.completed ==false).length);
+		}
+		
+		// 删除功能，利用了事件委托
+		// 优点，性能好，可以提前给目前不存在的元素提前绑定事件
+		$('#todo-list').on('click', '.destroy', function () {
+			// 获取当前点击的这个删除按钮的自定义属性
+			var _id = $(this).attr('data-id');
+			// console.log($(this))
+			// console.log(_id);		//5cebb7e9687734115037fba4	
+			$.ajax({
+				// 这里用了get
+				type: 'get',
+				url: '/todo/deleteTask',
+				data: {
+					_id: _id
+				},
+				success: function (res) {
+					console.log(res)
+					// 循环遍历taskArr，找到——id值一样的，删除掉，重新渲染页面
+					// 方法一
+					// for (var i = 0; i < taskArr.length; i++) {
+					// 	if (taskArr[i]._id == _id) {
+					// 		console.log(taskArr)
+					// 		taskArr.splice(i, 1);
+					// 		render();
+					// 		break;
+					// 	}
+					// }
+					// 方法二
+					var index = taskArr.findIndex(function(value,index){
+						if(value._id == _id)return true;
+					})
+					taskArr.splice(index,1);
+					render()
+				}
+			})
+		})
+		// 修改任务状态
+		$('#todo-list').on('change', '.toggle', function () {
+			// 如果一个属性的值是布尔值，不能用attr获取，必须要用prop获取
+			
+			// 改变数据库中的这个状态值_id值
+			// var status = $(this).is(':checked');
+			// console.log(status)
+			var status = $(this).prop('checked');
+			// console.log($(this).prop('checked')); 
+			var _id = $(this).siblings('.destroy').attr('data-id');
+			// console.log(_id)
+			$.ajax({
+				type: 'post',
+				url: '/todo/modifyTask',
+				contentType: 'application/json',
+				data: JSON.stringify({_id:_id,completed:status}),
+				success: function (response) {
+					var index = taskArr.findIndex(function (value) {
+						return value._id == _id;
+						console.log(value)
+					})
+					taskArr[index].completed = status;
+					// console.log(taskArr)
+					render();
+				}
+			})
+		})
+		// 双击编辑内容
+		$('#todo-list').on('dblclick','label',function(){
+			// $(this).parent().parent().addClass('editing');
+			// $(this).parent().siblings('input').val();
+			var $li =$(this).parent().parent();
+			console.log($li)
+			$li.addClass('editing');
+			var t = $li.find('.edit').val();
+			$li.find('.edit').val('').focus().val(t);
+		})
+		// 失去焦点
+		$('#todo-list').on('blur','.edit',function(){
+			
+			// 获取id值，加最新的input的内容
+			var _id = $(this).attr('data-id');
+			var title = $(this).val();
+			// console.log(_id,value)
+			$.ajax({
+				url:'/todo/modifyTask',
+				type:'post',
+				contentType: 'application/json',
+				data:JSON.stringify({
+					_id:_id,
+					title:title
+				}),
+				success:function(response){
+					console.log(response);
+					console.log(taskArr)
+					var index =taskArr.findIndex(function(value,index){
+						return value._id ==_id;
+					})
+					console.log(index)
+					taskArr[index].title =title;
+					render();
+				}
+
+			})
+		})
+		// 实时计算最新的剩余未完成的数量
+		//清除所有的已完成的任务
+		$('.clear-completed').on('click',function(){
+			$.ajax({
+				type:'get',
+				url:'/todo/clearTask',
+				success:function(response){
+					console.log(response);
+					if(response.ok ==1){
+						console.log(response)
+						taskArr = taskArr.filter(item=>item.completed == false)
+						render();
+					}
+				}
+			})
+		})
+		// 监听描点的变化
+		window.addEventListener('hashchange',function(){
+			renderList()
+			
+		})
+		window.addEventListener('load',function(){
+			renderList()
+	
+		})
+		function renderList(){
+			var hash = location.hash;
+			console.log(hash);
+			var arr = [];
+			switch(hash){
+				case '#/':
+					arr = taskArr;
+					var Arr = $('#all').parent().siblings().children();
+					for(var i=0;i<Arr.length;i++){
+						Arr[i].className = '';
+					}
+					$('#all').addClass('selected');
+
+					break;
+				case '#/completed':
+					arr = taskArr.filter(item=>item.completed ==true);
+					var Arr = $('#completed').parent().siblings().children();
+					for(var i=0;i<Arr.length;i++){
+						Arr[i].className = '';
+					}
+					$('#completed').addClass('selected');
+					break;
+				case '#/active':
+					arr = taskArr.filter(item => item.completed ==false)
+					var Arr = $('#active').parent().siblings().children();
+					for(var i=0;i<Arr.length;i++){
+						Arr[i].className = '';
+					}
+					$('#active').addClass('selected');
+					break;
+			}
+			var html = template('todoTpl',{tasks:arr});
+			$('#todo-list').html(html);
+		}
+	</script>
+</body>
+
+</html>
